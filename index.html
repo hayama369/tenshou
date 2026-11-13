@@ -303,10 +303,18 @@ function makeCalc(A){
   function retroPeriods(date,pos){
     const out=[];
     for(const p of pos){ if(p.key==="Sun"||p.key==="Moon") continue;
-      if(p.retro||p.station){
+      if(p.retro){
+        // いま逆行中：直前の「逆行に入った日」から、次の「順行に戻る日」まで
         const end=findStation(p.key,date,1,300);
         const start=findStation(p.key,date,-1,300);
-        out.push({p,start:start&&start.toRetro?start.time:(start?start.time:null),end:end?end.time:null,endToDirect:end?!end.toRetro:null});
+        out.push({p,start:start?start.time:null,end:end?end.time:null,soon:false});
+      }else if(p.station){
+        // 順行のまま止まりかけ：もうすぐ逆行に入る時だけ載せる（順行に戻ったばかりなら載せない）
+        const nx=findStation(p.key,date,1,10);
+        if(nx&&nx.toRetro){
+          const end=findStation(p.key,new Date(nx.time.getTime()+86400000),1,300);
+          out.push({p,start:nx.time,end:end?end.time:null,soon:true});
+        }
       }
     }
     return out;
@@ -398,11 +406,12 @@ if(typeof module!=="undefined") module.exports=makeCalc;
       const st = r.p.station ? `<span class="chip st">留</span>` : `<span class="chip r">逆行</span>`;
       const slow=!r.p.fast;
       const f=d=>d?(slow?md(d):full(d)):"—";
-      return `<li><span class="when-col"><b>${r.p.ja}</b>${C.SIGNS[r.p.sign]}</span><span class="what">${st} ${f(r.start)} 〜 ${f(r.end)}<small>${r.end?`順行に戻るまで${rel(r.end,date)}`:""}</small></span></li>`;
+      const note = r.soon ? `もうすぐ逆行に入ります（${rel(r.start,date)}）` : (r.end?`順行に戻るまで${rel(r.end,date)}`:"");
+      return `<li><span class="when-col"><b>${r.p.ja}</b>${C.SIGNS[r.p.sign]}</span><span class="what">${st} ${f(r.start)} 〜 ${f(r.end)}<small>${note}</small></span></li>`;
     }).join("") : `<li><span></span><p class="empty">逆行中の天体はありません</p></li>`;
 
     // 五 全天体
-    document.getElementById('pos').innerHTML = pos.map(p=>`<tr class="${p.fast?'':'slow'}"><td class="sym">${p.sym}</td><td class="name">${p.ja}</td><td>${C.SIGNS[p.sign]}</td><td>${p.deg}</td><td>${p.station?'<span class="chip st">留</span>':p.retro?'<span class="chip r">逆行</span>':'順行'}</td></tr>`).join("");
+    document.getElementById('pos').innerHTML = pos.map(p=>`<tr class="${p.fast?'':'slow'}"><td class="sym">${p.sym}</td><td class="name">${p.ja}</td><td>${C.SIGNS[p.sign]}</td><td>${p.deg}</td><td>${p.station?`<span class="chip st">留</span>`:p.retro?'<span class="chip r">逆行</span>':'順行'}</td></tr>`).join("");
 
     // まとめ
     const soon=ev.filter(e=>e.time>=date && e.time-date<2*DAY);
